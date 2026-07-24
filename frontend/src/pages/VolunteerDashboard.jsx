@@ -11,6 +11,10 @@ import {
   Wifi,
   WifiOff,
   Zap,
+  CheckCircle2,
+  PlayCircle,
+  Mail,
+  RefreshCw,
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
@@ -26,7 +30,8 @@ import { Modal } from '../components/ui/Modal';
 // ─── Tab definitions ────────────────────────────────────────────────────────
 const TABS = [
   { id: 'available', label: 'Available Requests' },
-  { id: 'active',    label: 'My Active'           },
+  { id: 'active',    label: 'My Assigned Requests' },
+  { id: 'completed', label: 'Completed Requests'  },
 ];
 
 // ─── Availability status config ──────────────────────────────────────────────
@@ -35,34 +40,25 @@ const AVAILABILITY_OPTIONS = [
     value: 'available',
     label: 'Available',
     icon: Wifi,
-    /** Active button colours */
-    active:
-      'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-200 dark:shadow-emerald-900/30',
-    /** Inactive (ghost) colours */
-    idle:
-      'bg-white dark:bg-surface-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20',
+    active: 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-200 dark:shadow-emerald-900/30',
+    idle: 'bg-white dark:bg-surface-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20',
   },
   {
     value: 'busy',
     label: 'Busy',
     icon: Zap,
-    active:
-      'bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-200 dark:shadow-amber-900/30',
-    idle:
-      'bg-white dark:bg-surface-800 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20',
+    active: 'bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-200 dark:shadow-amber-900/30',
+    idle: 'bg-white dark:bg-surface-800 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20',
   },
   {
     value: 'offline',
     label: 'Offline',
     icon: WifiOff,
-    active:
-      'bg-surface-500 hover:bg-surface-600 text-white shadow-lg shadow-surface-200 dark:shadow-surface-900/30',
-    idle:
-      'bg-white dark:bg-surface-800 text-surface-500 dark:text-surface-400 border border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700',
+    active: 'bg-surface-500 hover:bg-surface-600 text-white shadow-lg shadow-surface-200 dark:shadow-surface-900/30',
+    idle: 'bg-white dark:bg-surface-800 text-surface-500 dark:text-surface-400 border border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700',
   },
 ];
 
-// ─── Priority colour map used in the detail modal ────────────────────────────
 const PRIORITY_COLORS = {
   low:       'bg-surface-100 text-surface-600 dark:bg-surface-700 dark:text-surface-300',
   medium:    'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
@@ -70,7 +66,6 @@ const PRIORITY_COLORS = {
   emergency: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
 };
 
-// ─── Tiny section divider used inside the modal ──────────────────────────────
 function InfoRow({ label, value, icon: Icon }) {
   if (!value) return null;
   return (
@@ -92,8 +87,7 @@ function InfoRow({ label, value, icon: Icon }) {
   );
 }
 
-// ─── Empty-state placeholder ─────────────────────────────────────────────────
-function EmptyState({ message }) {
+function EmptyState({ message, onRetry }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -101,200 +95,207 @@ function EmptyState({ message }) {
       className="flex flex-col items-center justify-center py-16 text-surface-400 dark:text-surface-500"
     >
       <ClipboardList className="w-12 h-12 mb-3 opacity-40" />
-      <p className="text-sm font-medium">{message}</p>
+      <p className="text-sm font-medium mb-4">{message}</p>
+      {onRetry && (
+        <Button variant="secondary" size="sm" icon={RefreshCw} onClick={onRetry}>
+          Refresh Requests
+        </Button>
+      )}
     </motion.div>
   );
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// VolunteerDashboard
-// ════════════════════════════════════════════════════════════════════════════
 export default function VolunteerDashboard() {
   const { user, updateUser } = useAuth();
 
-  // ── State ────────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab]           = useState('available');
-  const [availability, setAvailability]     = useState(user?.availability ?? 'offline');
-  const [availLoading, setAvailLoading]     = useState(false);
+  const [activeTab, setActiveTab] = useState('available');
+  const [availability, setAvailability] = useState(user?.availability ?? 'available');
+  const [availLoading, setAvailLoading] = useState(false);
 
-  /** Pending requests shown in the "Available Requests" tab */
   const [pendingRequests, setPendingRequests] = useState([]);
-  /** Accepted/in-progress requests shown in the "My Active" tab */
-  const [activeRequests, setActiveRequests]   = useState([]);
-  /** Derived stats fetched once on mount */
-  const [stats, setStats]                     = useState({
-    availableCount: 0,
-    activeCount:    0,
-    completedCount: 0,
-    rating:         null,
-  });
-  const [statsLoading, setStatsLoading]  = useState(true);
-  const [tabLoading, setTabLoading]      = useState(false);
+  const [assignedRequests, setAssignedRequests] = useState([]);
+  const [completedRequests, setCompletedRequests] = useState([]);
 
-  /** Request detail modal */
+  const [stats, setStats] = useState({
+    availableCount: 0,
+    assignedCount: 0,
+    completedCount: 0,
+    rating: 5.0,
+  });
+
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [tabLoading, setTabLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
+
   const [selectedRequest, setSelectedRequest] = useState(null);
 
-  // ── Fetch stats on mount ──────────────────────────────────────────────────
-  useEffect(() => {
-    async function fetchStats() {
-      try {
-        setStatsLoading(true);
-        const [allRes, profileRes] = await Promise.all([
-          api.get('/requests'),
-          api.get('/profile'),
-        ]);
-
-        // Backend wraps: { success, data: { requests: [...], total, ... } }
-        const allRequests = allRes.data?.data?.requests ?? allRes.data?.data ?? allRes.data ?? [];
-        const profile     = profileRes.data?.data ?? profileRes.data ?? {};
-
-        // Sync local availability with server value on first load
-        setAvailability(profile.availability ?? 'offline');
-
-        setStats({
-          availableCount: allRequests.filter(r => r.status === 'pending').length,
-          activeCount:    allRequests.filter(
-            r => r.status === 'accepted' || r.status === 'in_progress'
-          ).length,
-          completedCount: allRequests.filter(r => r.status === 'completed').length,
-          rating:         profile.rating ?? null,
-        });
-      } catch (err) {
-        toast.error(err.message || 'Failed to load dashboard stats');
-      } finally {
-        setStatsLoading(false);
-      }
-    }
-
-    fetchStats();
-  }, []);
-
-  // ── Fetch requests for the current tab ───────────────────────────────────
-  const fetchTabRequests = useCallback(async (tab) => {
-    setTabLoading(true);
+  // Fetch all data
+  const loadDashboardData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setTabLoading(true);
     try {
-      if (tab === 'available') {
-        const res = await api.get('/requests?status=pending');
-        // Unwrap paginated response: { data: { requests: [...] } }
-        const list = res.data?.data?.requests ?? res.data?.data ?? res.data ?? [];
-        setPendingRequests(Array.isArray(list) ? list : []);
-      } else {
-        // Fetch accepted and in_progress in parallel, then merge
-        const [acceptedRes, inProgressRes] = await Promise.all([
-          api.get('/requests?status=accepted'),
-          api.get('/requests?status=in_progress'),
-        ]);
-        const accepted   = acceptedRes.data?.data?.requests   ?? acceptedRes.data?.data   ?? acceptedRes.data   ?? [];
-        const inProgress = inProgressRes.data?.data?.requests ?? inProgressRes.data?.data ?? inProgressRes.data ?? [];
-        setActiveRequests([
-          ...(Array.isArray(accepted)   ? accepted   : []),
-          ...(Array.isArray(inProgress) ? inProgress : []),
-        ]);
+      setFetchError(null);
+      const [requestsRes, profileRes] = await Promise.all([
+        api.get('/requests'),
+        api.get('/profile').catch(() => null),
+      ]);
+
+      const all = requestsRes.data?.data?.requests ?? requestsRes.data?.data ?? requestsRes.data ?? [];
+      const requestsList = Array.isArray(all) ? all : [];
+
+      if (profileRes?.data?.data) {
+        const prof = profileRes.data.data;
+        if (prof.availability) setAvailability(prof.availability);
       }
+
+      // Filter lists based on scoping
+      const pending = requestsList.filter(r => r.status === 'pending');
+      const assigned = requestsList.filter(r =>
+        (r.status === 'accepted' || r.status === 'in_progress') &&
+        (r.volunteer_id === user?.id || r.volunteer?.id === user?.id)
+      );
+      const completed = requestsList.filter(r =>
+        r.status === 'completed' &&
+        (r.volunteer_id === user?.id || r.volunteer?.id === user?.id)
+      );
+
+      setPendingRequests(pending);
+      setAssignedRequests(assigned);
+      setCompletedRequests(completed);
+
+      setStats({
+        availableCount: pending.length,
+        assignedCount: assigned.length,
+        completedCount: completed.length || user?.completed_tasks || 0,
+        rating: user?.rating ?? 5.0,
+      });
     } catch (err) {
-      toast.error(err.message || 'Failed to load requests');
+      setFetchError(err.message || 'Failed to load dashboard requests');
+      if (!isSilent) toast.error(err.message || 'Failed to load requests');
     } finally {
-      setTabLoading(false);
+      if (!isSilent) {
+        setTabLoading(false);
+        setInitialLoading(false);
+      }
     }
-  }, []);
+  }, [user?.id, user?.completed_tasks, user?.rating]);
 
-  // Re-fetch whenever the active tab changes
+  // Polling every 5 seconds for real-time updates
   useEffect(() => {
-    fetchTabRequests(activeTab);
-  }, [activeTab, fetchTabRequests]);
+    loadDashboardData(false);
+    const interval = setInterval(() => {
+      loadDashboardData(true);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [loadDashboardData]);
 
-  // ── Availability toggle ───────────────────────────────────────────────────
+  // Handle Availability Change
   const handleAvailability = async (newStatus) => {
     if (newStatus === availability || availLoading) return;
     const prev = availability;
-    setAvailability(newStatus); // optimistic update
+    setAvailability(newStatus);
     setAvailLoading(true);
     try {
       await api.put('/profile', { availability: newStatus });
       updateUser({ availability: newStatus });
-      toast.success(`Status set to "${newStatus}"`);
+      toast.success(`Status updated to "${newStatus}"`);
     } catch (err) {
-      setAvailability(prev); // roll back on failure
-      toast.error(err.message || 'Failed to update availability');
+      setAvailability(prev);
+      toast.error(err.message || 'Failed to update status');
     } finally {
       setAvailLoading(false);
     }
   };
 
-  // ── Accept a pending request ──────────────────────────────────────────────
+  // Accept request
   const handleAccept = async (request) => {
-    const id = request._id ?? request.id;
+    const id = request.id;
     const toastId = toast.loading('Accepting request…');
     try {
       await api.put(`/requests/${id}`, { status: 'accepted' });
       toast.success('Request accepted! 🎉', { id: toastId });
-      // Optimistically remove from pending list and update counters
-      setPendingRequests(prev => prev.filter(r => (r._id ?? r.id) !== id));
-      setStats(prev => ({
-        ...prev,
-        availableCount: Math.max(0, prev.availableCount - 1),
-        activeCount:    prev.activeCount + 1,
-      }));
+      loadDashboardData(false);
     } catch (err) {
       toast.error(err.message || 'Failed to accept request', { id: toastId });
     }
   };
 
-  // ── Mark an active request as complete ───────────────────────────────────
+  // Start in-progress
+  const handleStartProgress = async (request) => {
+    const id = request.id;
+    const toastId = toast.loading('Starting task…');
+    try {
+      await api.put(`/requests/${id}`, { status: 'in_progress' });
+      toast.success('Task marked as In Progress ⚡', { id: toastId });
+      loadDashboardData(false);
+    } catch (err) {
+      toast.error(err.message || 'Failed to update request', { id: toastId });
+    }
+  };
+
+  // Mark complete
   const handleComplete = async (request) => {
-    const id = request._id ?? request.id;
-    const toastId = toast.loading('Marking complete…');
+    const id = request.id;
+    const toastId = toast.loading('Completing request…');
     try {
       await api.put(`/requests/${id}`, { status: 'completed' });
-      toast.success('Great work! Request marked complete ✅', { id: toastId });
-      setActiveRequests(prev => prev.filter(r => (r._id ?? r.id) !== id));
-      setStats(prev => ({
-        ...prev,
-        activeCount:    Math.max(0, prev.activeCount - 1),
-        completedCount: prev.completedCount + 1,
-      }));
+      toast.success('Great job! Request marked completed ✅', { id: toastId });
+      loadDashboardData(false);
     } catch (err) {
       toast.error(err.message || 'Failed to complete request', { id: toastId });
     }
   };
 
-  // ── Derived values ────────────────────────────────────────────────────────
-  const displayRating = stats.rating != null
-    ? Number(stats.rating).toFixed(1)
-    : '—';
+  // Tab requests resolver
+  const currentRequests =
+    activeTab === 'available' ? pendingRequests :
+    activeTab === 'active'    ? assignedRequests : completedRequests;
 
-  const currentTabRequests = activeTab === 'available' ? pendingRequests : activeRequests;
-
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-surface-50 dark:bg-surface-900 pb-12">
 
-      {/* ── Page header ─────────────────────────────────────────────────── */}
+      {/* ── Page & Volunteer Info Header ───────────────────────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 200, damping: 24 }}
-        className="px-4 pt-8 pb-6 sm:px-8"
+        className="px-4 pt-6 pb-6 sm:px-8 bg-white dark:bg-surface-800 rounded-3xl mb-8 border border-surface-100 dark:border-surface-700 shadow-sm"
       >
-        <h1 className="text-3xl font-extrabold text-surface-900 dark:text-white tracking-tight">
-          Volunteer Dashboard
-        </h1>
-        <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">
-          Welcome back, {user?.name ?? 'Volunteer'} 👋
-        </p>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                Volunteer Account
+              </span>
+              <span className="text-xs text-surface-400">Live Auto-Sync (5s)</span>
+            </div>
+            <h1 className="text-3xl font-extrabold text-surface-900 dark:text-white tracking-tight">
+              {user?.name || 'Volunteer Dashboard'}
+            </h1>
+            <p className="mt-1 text-sm text-surface-500 dark:text-surface-400 flex items-center gap-2">
+              <Mail className="w-4 h-4 text-surface-400" />
+              <span>{user?.email || 'No email provided'}</span>
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={RefreshCw}
+              onClick={() => loadDashboardData(false)}
+            >
+              Refresh
+            </Button>
+          </div>
+        </div>
       </motion.div>
 
       <div className="px-4 sm:px-8 space-y-8">
 
-        {/* ── Stat cards ─────────────────────────────────────────────────── */}
-        {statsLoading ? (
-          /* Pulse skeleton placeholders */
+        {/* ── Dynamic Stat cards ─────────────────────────────────────────── */}
+        {initialLoading ? (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-36 rounded-3xl bg-surface-100 dark:bg-surface-800 animate-pulse"
-              />
+              <div key={i} className="h-36 rounded-3xl bg-surface-100 dark:bg-surface-800 animate-pulse" />
             ))}
           </div>
         ) : (
@@ -308,22 +309,22 @@ export default function VolunteerDashboard() {
             />
             <StatCard
               icon={Zap}
-              value={stats.activeCount}
-              label="My Active"
+              value={stats.assignedCount}
+              label="Assigned Requests"
               color="amber"
               index={1}
             />
             <StatCard
-              icon={Wifi}
+              icon={CheckCircle2}
               value={stats.completedCount}
-              label="Completed Tasks"
+              label="Completed Requests"
               color="green"
               index={2}
             />
             <StatCard
               icon={Star}
-              value={displayRating}
-              label="My Rating"
+              value={Number(stats.rating).toFixed(1)}
+              label="Volunteer Rating"
               color="purple"
               index={3}
             />
@@ -335,10 +336,10 @@ export default function VolunteerDashboard() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="shrink-0">
               <h2 className="text-base font-bold text-surface-900 dark:text-white">
-                My Availability
+                My Availability Status
               </h2>
               <p className="text-xs text-surface-500 dark:text-surface-400 mt-0.5">
-                Let elders know when you're ready to help
+                Set status to let elders know when you are ready to assist
               </p>
             </div>
 
@@ -352,15 +353,13 @@ export default function VolunteerDashboard() {
                     whileTap={{ scale: 0.95 }}
                     onClick={() => handleAvailability(opt.value)}
                     disabled={availLoading}
-                    aria-pressed={isActive}
                     className={`
                       inline-flex items-center gap-2 px-4 py-2 rounded-2xl text-sm font-semibold
-                      transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2
+                      transition-all duration-200 focus:outline-none
                       disabled:opacity-60 disabled:cursor-not-allowed
                       ${isActive ? opt.active : opt.idle}
                     `}
                   >
-                    {/* Show spinner on the active button while saving, otherwise show icon */}
                     {availLoading && isActive
                       ? <Loader2 className="w-4 h-4 animate-spin" />
                       : <Icon className="w-4 h-4" />
@@ -375,12 +374,11 @@ export default function VolunteerDashboard() {
 
         {/* ── Tabbed request lists ────────────────────────────────────────── */}
         <div>
-          {/* Tab strip */}
-          <div className="flex gap-2 mb-5">
+          <div className="flex gap-2 mb-5 flex-wrap">
             {TABS.map(tab => {
               const count =
                 tab.id === 'available' ? stats.availableCount :
-                tab.id === 'active'    ? stats.activeCount     : 0;
+                tab.id === 'active'    ? stats.assignedCount  : stats.completedCount;
               const isSelected = activeTab === tab.id;
               return (
                 <button
@@ -388,65 +386,97 @@ export default function VolunteerDashboard() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`
                     relative px-5 py-2.5 rounded-2xl text-sm font-semibold
-                    transition-all duration-200 focus:outline-none focus:ring-2
-                    focus:ring-blue-300 focus:ring-offset-2
+                    transition-all duration-200 focus:outline-none
                     ${isSelected
                       ? 'gradient-primary text-white shadow-lg shadow-blue-200 dark:shadow-blue-900/30'
-                      : 'bg-white dark:bg-surface-800 text-surface-600 dark:text-surface-300 border border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700 card-shadow'
+                      : 'bg-white dark:bg-surface-800 text-surface-600 dark:text-surface-300 border border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-700'
                     }
                   `}
                 >
                   {tab.label}
-                  {/* Live count badge – only on active (selected) tab */}
-                  {isSelected && count > 0 && (
-                    <span className="ml-2 inline-flex items-center justify-center w-5 h-5 rounded-full bg-white/30 text-white text-xs font-bold">
-                      {count}
-                    </span>
-                  )}
+                  <span className={`ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold ${
+                    isSelected ? 'bg-white/30 text-white' : 'bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-300'
+                  }`}>
+                    {count}
+                  </span>
                 </button>
               );
             })}
           </div>
 
-          {/* Tab content with AnimatePresence slide transition */}
+          {/* Request Cards Grid */}
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, x: activeTab === 'available' ? -20 : 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: activeTab === 'available' ? 20 : -20 }}
-              transition={{ type: 'spring', stiffness: 260, damping: 28 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
             >
-              {tabLoading ? (
-                /* Skeleton cards while fetching */
+              {tabLoading && currentRequests.length === 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {Array.from({ length: 3 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="h-48 rounded-3xl bg-surface-100 dark:bg-surface-800 animate-pulse"
-                    />
+                    <div key={i} className="h-48 rounded-3xl bg-surface-100 dark:bg-surface-800 animate-pulse" />
                   ))}
                 </div>
-              ) : currentTabRequests.length === 0 ? (
+              ) : fetchError ? (
+                <EmptyState message={fetchError} onRetry={() => loadDashboardData(false)} />
+              ) : currentRequests.length === 0 ? (
                 <EmptyState
                   message={
                     activeTab === 'available'
-                      ? 'No pending requests right now. Check back soon!'
-                      : "You haven't accepted any requests yet."
+                      ? 'No pending requests right now. New requests will appear automatically.'
+                      : activeTab === 'active'
+                      ? "You don't have any assigned active requests."
+                      : "You haven't completed any requests yet."
                   }
+                  onRetry={() => loadDashboardData(false)}
                 />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {currentTabRequests.map((request, index) => (
-                    <RequestCard
-                      key={request._id ?? request.id}
-                      request={request}
-                      role="volunteer"
-                      index={index}
-                      onView={setSelectedRequest}
-                      onAccept={activeTab === 'available' ? handleAccept : undefined}
-                      onComplete={activeTab === 'active'  ? handleComplete : undefined}
-                    />
+                  {currentRequests.map((request, index) => (
+                    <div key={request.id} className="relative group">
+                      <RequestCard
+                        request={request}
+                        role="volunteer"
+                        index={index}
+                        onView={setSelectedRequest}
+                      />
+                      <div className="mt-2 flex gap-2">
+                        {activeTab === 'available' && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className="w-full text-xs"
+                            onClick={() => handleAccept(request)}
+                          >
+                            Accept Request
+                          </Button>
+                        )}
+                        {activeTab === 'active' && request.status === 'accepted' && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={PlayCircle}
+                            className="w-full text-xs"
+                            onClick={() => handleStartProgress(request)}
+                          >
+                            Start In Progress
+                          </Button>
+                        )}
+                        {activeTab === 'active' && (request.status === 'in_progress' || request.status === 'accepted') && (
+                          <Button
+                            variant="success"
+                            size="sm"
+                            icon={CheckCircle2}
+                            className="w-full text-xs"
+                            onClick={() => handleComplete(request)}
+                          >
+                            Mark Completed
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
@@ -463,54 +493,20 @@ export default function VolunteerDashboard() {
         maxWidth="max-w-lg"
       >
         {selectedRequest && (
-          <div className="space-y-1">
-
-            {/* Priority badge */}
-            {selectedRequest.priority && (
-              <div className="mb-4">
-                <span
-                  className={`
-                    inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold
-                    tracking-wide capitalize
-                    ${PRIORITY_COLORS[selectedRequest.priority] ?? PRIORITY_COLORS.low}
-                  `}
-                >
-                  {selectedRequest.priority === 'emergency' && '🚨 '}
-                  {selectedRequest.priority.charAt(0).toUpperCase() +
-                   selectedRequest.priority.slice(1)} Priority
-                </span>
-              </div>
-            )}
-
-            {/* Status badge */}
-            <div className="mb-4 flex items-center gap-2">
-              <span className="text-xs font-semibold text-surface-400 dark:text-surface-500 uppercase tracking-wide">
-                Status:
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${PRIORITY_COLORS[selectedRequest.priority] || PRIORITY_COLORS.low}`}>
+                {selectedRequest.priority} priority
               </span>
-              <Badge
-                type={selectedRequest.status}
-                label={selectedRequest.status.replace('_', ' ')}
-              />
+              <Badge type={selectedRequest.status} label={selectedRequest.status.replace('_', ' ')} />
             </div>
 
-            {/* Divider */}
-            <div className="border-t border-surface-100 dark:border-surface-700 mb-1" />
-
-            {/* Detail rows */}
-            <InfoRow icon={User}         label="Requester"  value={selectedRequest.requester?.name} />
-            <InfoRow icon={Phone}        label="Phone"      value={selectedRequest.requester?.phone} />
-            <InfoRow icon={MapPin}       label="Location"   value={selectedRequest.location} />
+            <InfoRow icon={User} label="Requester Name" value={selectedRequest.requester?.name} />
+            <InfoRow icon={Phone} label="Requester Phone" value={selectedRequest.requester?.phone || 'Not provided'} />
+            <InfoRow icon={MapPin} label="Location" value={selectedRequest.location || 'Not specified'} />
             <InfoRow icon={ClipboardList} label="Description" value={selectedRequest.description} />
-            {selectedRequest.scheduled_time && (
-              <InfoRow
-                icon={Zap}
-                label="Scheduled"
-                value={new Date(selectedRequest.scheduled_time).toLocaleString()}
-              />
-            )}
 
-            {/* Action buttons */}
-            <div className="flex gap-3 pt-5">
+            <div className="flex gap-3 pt-4">
               {selectedRequest.status === 'pending' && (
                 <Button
                   variant="primary"
@@ -524,8 +520,20 @@ export default function VolunteerDashboard() {
                   Accept Request
                 </Button>
               )}
-              {(selectedRequest.status === 'accepted' ||
-                selectedRequest.status === 'in_progress') && (
+              {selectedRequest.status === 'accepted' && (
+                <Button
+                  variant="secondary"
+                  size="md"
+                  className="flex-1"
+                  onClick={() => {
+                    handleStartProgress(selectedRequest);
+                    setSelectedRequest(null);
+                  }}
+                >
+                  Start Task
+                </Button>
+              )}
+              {(selectedRequest.status === 'accepted' || selectedRequest.status === 'in_progress') && (
                 <Button
                   variant="success"
                   size="md"
@@ -538,11 +546,7 @@ export default function VolunteerDashboard() {
                   Mark Complete
                 </Button>
               )}
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={() => setSelectedRequest(null)}
-              >
+              <Button variant="secondary" size="md" onClick={() => setSelectedRequest(null)}>
                 Close
               </Button>
             </div>

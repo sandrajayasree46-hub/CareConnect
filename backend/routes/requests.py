@@ -1,8 +1,9 @@
 from flask import Blueprint, request
-from datetime import datetime
+from datetime import datetime, timedelta
 from database.db import db
 from models.request import Request
 from models.user import User
+from models.notification import Notification
 from utils.helpers import token_required, role_required, success_response, error_response
 
 requests_bp = Blueprint("requests", __name__)
@@ -12,26 +13,36 @@ VALID_PRIORITIES = {"low", "medium", "high", "emergency"}
 VALID_STATUSES = {"pending", "accepted", "in_progress", "completed", "cancelled"}
 
 
+def create_notifications_for_volunteers_and_admins(title, message, notif_type):
+    """Utility to create notification records for active volunteers and admins."""
+    users = User.query.filter(User.role.in_(["volunteer", "admin"]), User.is_active == True).all()
+    for u in users:
+        n = Notification(user_id=u.id, title=title, message=message, type=notif_type)
+        db.session.add(n)
+
+
 @requests_bp.route("/requests", methods=["GET"])
 @token_required
 def get_requests():
     """
     - Elders see their own requests
-    - Volunteers see all pending/accepted requests
+    - Volunteers see pending requests OR requests assigned to them
     - Admins see everything
     """
     user_id = request.current_user["user_id"]
     role = request.current_user["role"]
     status_filter = request.args.get("status")
     page = int(request.args.get("page", 1))
-    per_page = int(request.args.get("per_page", 20))
+    per_page = int(request.args.get("per_page", 50))
 
     query = Request.query
     if role == "elder":
         query = query.filter_by(user_id=user_id)
     elif role == "volunteer":
-        query = query.filter(Request.status.in_(["pending", "accepted", "in_progress"]))
-    # admin sees all
+        # Volunteer sees all pending requests OR requests assigned to them
+        query = query.filter(
+            (Request.status == "pending") | (Request.volunteer_id == user_id)
+        )
 
     if status_filter and status_filter in VALID_STATUSES:
         query = query.filter_by(status=status_filter)
@@ -68,17 +79,40 @@ def create_request():
     if priority not in VALID_PRIORITIES:
         return error_response(f"Invalid priority. Must be one of: {', '.join(VALID_PRIORITIES)}")
 
+    description_clean = data["description"].strip()
+
+    # Prevent duplicate submission within last 10 seconds
+    recent_cutoff = datetime.utcnow() - timedelta(seconds=10)
+    existing_duplicate = Request.query.filter(
+        Request.user_id == user_id,
+        Request.assistance_type == data["assistance_type"],
+        Request.description == description_clean,
+        Request.created_at >= recent_cutoff
+    ).first()
+
+    if existing_duplicate:
+        return error_response("Duplicate request detected. Please wait a moment before submitting again.", 409)
+
     req = Request(
         user_id=user_id,
         assistance_type=data["assistance_type"],
-        description=data["description"].strip(),
+        description=description_clean,
         priority=priority,
-        location=data.get("location", ""),
-        notes=data.get("notes", ""),
+        location=data.get("location", "").strip(),
+        notes=data.get("notes", "").strip(),
     )
     db.session.add(req)
+    db.session.flush()
+
+    # Send notifications to volunteers & admins
+    requester = User.query.get(user_id)
+    requester_name = requester.name if requester else "An Elder"
+    title = f"New {priority.upper()} Request: {data['assistance_type'].title()}"
+    msg = f"{requester_name} requested assistance for {data['assistance_type']}: {description_clean[:60]}..."
+    create_notifications_for_volunteers_and_admins(title, msg, "request_created")
+
     db.session.commit()
-    return success_response(req.to_dict(), "Request submitted successfully", 201)
+    return success_response(req.to_dict(include_requester=True), "Request submitted successfully", 201)
 
 
 @requests_bp.route("/requests/<int:req_id>", methods=["GET"])
@@ -89,8 +123,10 @@ def get_request(req_id):
     user_id = request.current_user["user_id"]
     role = request.current_user["role"]
 
-    # Elders can only see their own requests
+    # Scoping check
     if role == "elder" and req.user_id != user_id:
+        return error_response("Access denied", 403)
+    if role == "volunteer" and req.status != "pending" and req.volunteer_id != user_id:
         return error_response("Access denied", 403)
 
     return success_response(req.to_dict(include_requester=True))
@@ -105,26 +141,77 @@ def update_request(req_id):
     user_id = request.current_user["user_id"]
     role = request.current_user["role"]
 
-    # Only owner, assigned volunteer, or admin can update
+    # Permissions check
     if role == "elder" and req.user_id != user_id:
         return error_response("Access denied", 403)
+    if role == "volunteer" and req.status != "pending" and req.volunteer_id != user_id:
+        return error_response("Access denied", 403)
 
+    old_status = req.status
     new_status = data.get("status")
+
     if new_status:
         if new_status not in VALID_STATUSES:
             return error_response(f"Invalid status. Must be one of: {', '.join(VALID_STATUSES)}")
-        # Volunteer accepting
-        if new_status == "accepted" and role == "volunteer":
+
+        # Volunteer accepting a pending request
+        if new_status == "accepted":
+            if old_status != "pending" and req.volunteer_id != user_id:
+                return error_response("This request is no longer available to accept", 400)
             req.volunteer_id = user_id
+
+            # Notify elder
+            volunteer_user = User.query.get(user_id)
+            vol_name = volunteer_user.name if volunteer_user else "A volunteer"
+            n = Notification(
+                user_id=req.user_id,
+                title="Request Accepted! 🎉",
+                message=f"{vol_name} has accepted your request for {req.assistance_type}.",
+                type="request_accepted",
+            )
+            db.session.add(n)
+
+        elif new_status == "in_progress":
+            # Notify elder
+            n = Notification(
+                user_id=req.user_id,
+                title="Assistance In Progress ⚡",
+                message=f"Work on your {req.assistance_type} request has started.",
+                type="request_in_progress",
+            )
+            db.session.add(n)
+
         # Mark complete
-        if new_status == "completed":
-            req.completed_at = datetime.utcnow()
-            # Increment volunteer completed_tasks
-            if req.volunteer_id:
-                from models.volunteer import Volunteer
-                vol = Volunteer.query.filter_by(user_id=req.volunteer_id).first()
-                if vol:
-                    vol.completed_tasks += 1
+        elif new_status == "completed":
+            if old_status != "completed":
+                req.completed_at = datetime.utcnow()
+                # Increment volunteer completed_tasks only once
+                target_vol_id = req.volunteer_id or user_id
+                if target_vol_id:
+                    from models.volunteer import Volunteer
+                    vol = Volunteer.query.filter_by(user_id=target_vol_id).first()
+                    if vol:
+                        vol.completed_tasks += 1
+
+                # Notify elder
+                n_elder = Notification(
+                    user_id=req.user_id,
+                    title="Request Completed ✅",
+                    message=f"Your request for {req.assistance_type} has been completed.",
+                    type="request_completed",
+                )
+                db.session.add(n_elder)
+
+                # Notify volunteer if different user
+                if req.volunteer_id and req.volunteer_id != req.user_id:
+                    n_vol = Notification(
+                        user_id=req.volunteer_id,
+                        title="Task Completed ✅",
+                        message=f"Great job completing the request for {req.assistance_type}.",
+                        type="request_completed",
+                    )
+                    db.session.add(n_vol)
+
         req.status = new_status
 
     if "notes" in data:
@@ -139,7 +226,7 @@ def update_request(req_id):
 
     req.updated_at = datetime.utcnow()
     db.session.commit()
-    return success_response(req.to_dict(), "Request updated successfully")
+    return success_response(req.to_dict(include_requester=True), "Request updated successfully")
 
 
 @requests_bp.route("/requests/<int:req_id>", methods=["DELETE"])

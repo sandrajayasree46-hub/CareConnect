@@ -6,18 +6,18 @@ class Request(db.Model):
     __tablename__ = "requests"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     # Who accepted the request (volunteer)
-    volunteer_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    volunteer_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
     # assistance_type: 'medical' | 'grocery' | 'transport' | 'companionship' | 'home_repair' | 'other'
     assistance_type = db.Column(db.String(50), nullable=False)
     description = db.Column(db.Text, nullable=False)
     # priority: 'low' | 'medium' | 'high' | 'emergency'
     priority = db.Column(db.String(20), nullable=False, default="medium")
     # status: 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled'
-    status = db.Column(db.String(20), nullable=False, default="pending")
+    status = db.Column(db.String(20), nullable=False, default="pending", index=True)
     location = db.Column(db.String(255), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )

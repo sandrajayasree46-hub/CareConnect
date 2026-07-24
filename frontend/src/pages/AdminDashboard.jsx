@@ -196,11 +196,17 @@ export default function AdminDashboard() {
     }
   }, []);
 
-  // Initial data load
+  // Initial data load & 5s polling for live admin updates
   useEffect(() => {
     fetchStats();
     fetchUsers();
     fetchRequests();
+    const interval = setInterval(() => {
+      fetchStats();
+      fetchUsers();
+      fetchRequests();
+    }, 5000);
+    return () => clearInterval(interval);
   }, [fetchStats, fetchUsers, fetchRequests]);
 
   // ── User actions ───────────────────────────────────────────────────────────

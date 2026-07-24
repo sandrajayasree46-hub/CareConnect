@@ -417,6 +417,7 @@ export default function RequestAssistancePage() {
 
   /** POST the completed request to the API, then redirect on success. */
   const handleSubmit = async () => {
+    if (submitting) return;
     setSubmitting(true);
     try {
       await api.post('/requests', {

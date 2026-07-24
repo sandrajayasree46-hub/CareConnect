@@ -148,17 +148,17 @@ export default function ElderDashboard() {
   );
 
   // ── Fetch requests ────────────────────────────────────────────────────────
-  const fetchRequests = useCallback(async () => {
-    setLoadingRequests(true);
+  const fetchRequests = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoadingRequests(true);
     try {
       const { data } = await api.get('/requests');
       // Backend: { success, message, data: { requests: [...], total, page, pages } }
       const list = data?.data?.requests ?? data?.data ?? data ?? [];
       setRequests(Array.isArray(list) ? list : []);
     } catch (err) {
-      toast.error(`Could not load requests: ${err.message}`);
+      if (!isSilent) toast.error(`Could not load requests: ${err.message}`);
     } finally {
-      setLoadingRequests(false);
+      if (!isSilent) setLoadingRequests(false);
     }
   }, []);
 
@@ -178,8 +178,12 @@ export default function ElderDashboard() {
   }, []);
 
   useEffect(() => {
-    fetchRequests();
+    fetchRequests(false);
     fetchContacts();
+    const interval = setInterval(() => {
+      fetchRequests(true);
+    }, 5000);
+    return () => clearInterval(interval);
   }, [fetchRequests, fetchContacts]);
 
   // ── Derived stats ─────────────────────────────────────────────────────────

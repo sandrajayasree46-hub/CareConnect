@@ -6,6 +6,7 @@ from routes.auth import auth_bp
 from routes.requests import requests_bp
 from routes.users import users_bp
 from routes.admin import admin_bp
+from routes.notifications import notifications_bp
 
 
 def create_app():
@@ -13,8 +14,7 @@ def create_app():
     app.config.from_object(Config)
 
     # Enable CORS for all routes (Vite runs on port 5173)
-    CORS(app, resources={r"/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173"]}},
-         supports_credentials=True)
+    CORS(app, resources={r"/*": {"origins": ["*"]}}, supports_credentials=True)
 
     # Initialize database
     init_db(app)
@@ -24,6 +24,7 @@ def create_app():
     app.register_blueprint(requests_bp, url_prefix="/api")
     app.register_blueprint(users_bp, url_prefix="/api")
     app.register_blueprint(admin_bp, url_prefix="/api")
+    app.register_blueprint(notifications_bp, url_prefix="/api")
 
     @app.route("/api/health")
     def health():
