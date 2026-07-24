@@ -6,33 +6,42 @@
 
 A full-stack web application that connects elderly individuals who need assistance with compassionate volunteers — built with **Flask** + **React**.
 
+[![Live Demo](https://img.shields.io/badge/Vercel-Live--Demo-success?style=for-the-badge&logo=vercel&logoColor=white)](https://careconnect-beryl.vercel.app)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.0-000000?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-8.x-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
-[![TailwindCSS](https://img.shields.io/badge/Tailwind-4.x-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 
 </div>
 
 ---
 
+## 🌐 Live Production Application
+
+- **Live App**: [https://careconnect-beryl.vercel.app](https://careconnect-beryl.vercel.app)
+- **GitHub Repository**: [https://github.com/sandrajayasree46-hub/CareConnect.git](https://github.com/sandrajayasree46-hub/CareConnect.git)
+
+---
+
 ## 📖 About the Project
 
-**CareConnect** is a community-driven platform designed to make elderly care easier and more accessible. Elders can post requests for help (grocery runs, medical appointments, companionship, etc.), and verified volunteers can browse and accept those requests. Admins oversee the entire platform to ensure safety and smooth operations.
+**CareConnect** is a community-driven platform designed to make elderly care easier, faster, and more reliable. Elders can submit requests for help (grocery runs, medical assistance, transport, companionship, home repair, etc.), and verified volunteers can browse, accept, and complete those requests in real-time. Admins oversee the entire platform to maintain security, verify accounts, and monitor metrics.
 
-### 🎯 Key Features
+---
+
+## 🎯 Key Features & System Architecture
 
 | Feature | Description |
 |---|---|
-| 🔐 **Role-Based Auth** | Separate flows for Elders, Volunteers, and Admins with JWT-secured sessions |
-| 📋 **Assistance Requests** | Elders can post, track, and manage help requests with categories and urgency levels |
-| 🙋 **Volunteer Matching** | Volunteers browse available requests and accept them |
-| 📊 **Admin Dashboard** | Full platform oversight — manage users, view stats, moderate requests |
-| 🌙 **Dark Mode** | System-aware theme with manual toggle |
-| 📱 **Responsive Design** | Works beautifully on desktop and mobile |
-| 🚨 **Emergency Contacts** | Elders can register emergency contacts linked to their profile |
-| 🔔 **Toast Notifications** | Real-time feedback using `react-hot-toast` |
-| ✨ **Smooth Animations** | Powered by `framer-motion` |
+| 🔐 **Authentication & Session Persistence** | Role-based JWT authentication with persistent session state (`localStorage`), automatic token validation, and complete refresh protection across all routes without resets |
+| ⚡ **Live Auto-Sync & Polling** | Real-time 5-second background updates on Volunteer, Elder, and Admin dashboards so newly created requests appear instantly without page reloads |
+| 🔔 **Notification System** | Dynamic top-bar Notification Bell with unread badges and drop-down list. Automatic notification dispatching when requests are created, accepted, or completed |
+| 🔄 **Complete Request Lifecycle** | Strict lifecycle state transitions: `Pending` $\rightarrow$ `Accepted` $\rightarrow$ `In Progress` $\rightarrow$ `Completed` |
+| 🙋 **Volunteer Dashboard** | Displays Volunteer Name, Email, Available Requests, Assigned Requests, Completed Tasks, and Rating with dynamic live counters |
+| 👴 **Elder Dashboard & SOS** | Quick request wizard, live status tracking, emergency contact management, and one-tap SOS emergency alert system |
+| 📊 **Admin Dashboard** | Full platform analytics, user activation/deactivation, account moderation, and request tracking |
+| 🔒 **Security & Scoping** | Enforced role-based access control, foreign key constraints, duplicate submission prevention, and SQLAlchemy database indexing |
+| 🌙 **Dark Mode & Styling** | Sleek glassmorphism theme with dark/light mode toggle and responsive mobile design |
 
 ---
 
@@ -43,24 +52,22 @@ A full-stack web application that connects elderly individuals who need assistan
 |---|---|
 | **Flask 3.0** | REST API framework |
 | **Flask-SQLAlchemy** | ORM & database management |
-| **Flask-CORS** | Cross-origin resource sharing |
+| **SQLite** | Database engine with `PRAGMA foreign_keys=ON` |
 | **PyJWT** | JSON Web Token authentication |
-| **bcrypt** | Password hashing |
-| **SQLite** | Lightweight relational database |
-| **python-dotenv** | Environment variable management |
+| **bcrypt** | Secure password hashing |
+| **Flask-CORS** | Cross-origin resource sharing |
 
 ### Frontend
 | Technology | Purpose |
 |---|---|
-| **React 19** | UI framework |
-| **Vite 8** | Lightning-fast dev server & bundler |
-| **React Router v7** | Client-side routing |
-| **Axios** | HTTP client for API calls |
-| **TailwindCSS v4** | Utility-first styling |
-| **Framer Motion** | Animations and transitions |
-| **Lucide React** | Icon library |
+| **React 19** | Modern UI framework |
+| **Vite 8** | Fast build tool & development server |
+| **React Router v7** | Client-side SPA routing & route guards |
+| **Axios** | HTTP client with automatic token interceptors |
+| **TailwindCSS v4** | Utility-first styling system |
+| **Framer Motion** | Micro-animations and page transitions |
+| **Lucide React** | Icon system |
 | **react-hot-toast** | Toast notifications |
-| **clsx** | Conditional class names |
 
 ---
 
@@ -69,66 +76,49 @@ A full-stack web application that connects elderly individuals who need assistan
 ```
 careconnect/
 ├── README.md
-│
+├── vercel.json                      # Vercel deployment configuration
 ├── backend/                         # Flask REST API
-│   ├── app.py                       # App factory & server entry point
-│   ├── config.py                    # Configuration settings
-│   ├── requirements.txt             # Python dependencies
+│   ├── app.py                       # App factory & blueprint registration
+│   ├── config.py                    # App configuration
+│   ├── test_system.py               # E2E system test suite
 │   ├── database/
-│   │   └── db.py                    # SQLAlchemy instance
+│   │   └── db.py                    # SQLAlchemy instance & SQLite FK enforcer
 │   ├── models/
-│   │   ├── user.py                  # User model (Elder, Volunteer, Admin)
+│   │   ├── user.py                  # User model
 │   │   ├── request.py               # Assistance request model
 │   │   ├── volunteer.py             # Volunteer profile model
-│   │   └── emergency_contact.py     # Emergency contact model
+│   │   ├── emergency_contact.py     # Emergency contact model
+│   │   └── notification.py          # Notification model
 │   ├── routes/
-│   │   ├── auth.py                  # /api/register, /api/login
-│   │   ├── requests.py              # /api/requests (CRUD)
-│   │   ├── users.py                 # /api/profile, /api/emergency-contacts
-│   │   └── admin.py                 # /api/admin/* (admin only)
+│   │   ├── auth.py                  # Authentication routes (/api/login, /api/register)
+│   │   ├── requests.py              # Request CRUD & status lifecycle
+│   │   ├── notifications.py         # Notification endpoints
+│   │   ├── users.py                 # Profile & emergency contacts
+│   │   └── admin.py                 # Admin dashboard endpoints
 │   └── utils/
-│       └── helpers.py               # JWT helpers, auth decorators, bcrypt utils
+│       └── helpers.py               # Auth decorators, JWT, bcrypt helpers
 │
 └── frontend/                        # React + Vite SPA
     ├── index.html
-    ├── vite.config.js               # Vite config with API proxy
-    ├── package.json
+    ├── vite.config.js
     └── src/
-        ├── App.jsx                  # Root router & context providers
-        ├── main.jsx                 # React entry point
-        ├── index.css                # Global styles
+        ├── App.jsx                  # Root router & theme/auth providers
         ├── context/
-        │   ├── AuthContext.jsx      # Global auth state (JWT, user info)
-        │   └── ThemeContext.jsx     # Dark/light mode state
-        ├── services/
-        │   ├── api.js               # Axios instance with auth interceptors
-        │   └── auth.js              # Login, register, logout helpers
+        │   ├── AuthContext.jsx      # Session & user token state persistence
+        │   └── ThemeContext.jsx     # Dark mode context
         ├── layouts/
-        │   ├── AuthLayout.jsx       # Layout for login/register pages
-        │   └── DashboardLayout.jsx  # Layout with sidebar for dashboards
+        │   └── DashboardLayout.jsx  # Top bar, Notification Bell & Sidebar
         ├── pages/
-        │   ├── LandingPage.jsx      # Public home page
-        │   ├── LoginPage.jsx        # Login form
-        │   ├── RegisterPage.jsx     # Registration form with role selection
-        │   ├── ElderDashboard.jsx   # Elder's request management
-        │   ├── VolunteerDashboard.jsx # Volunteer's request browser
-        │   ├── AdminDashboard.jsx   # Admin control panel
-        │   ├── RequestAssistancePage.jsx # Create new request
-        │   ├── ProfilePage.jsx      # View & edit profile
-        │   └── SettingsPage.jsx     # App settings (theme, etc.)
-        └── components/
-            ├── ui/                  # Reusable UI primitives
-            │   ├── Button.jsx
-            │   ├── Card.jsx
-            │   ├── Badge.jsx
-            │   ├── Input.jsx
-            │   ├── Modal.jsx
-            │   └── Skeleton.jsx
-            ├── dashboard/           # Dashboard-specific widgets
-            │   ├── StatCard.jsx
-            │   └── RequestCard.jsx
-            └── common/
-                └── Sidebar.jsx      # Navigation sidebar
+        │   ├── ElderDashboard.jsx   # Elder dashboard & emergency contacts
+        │   ├── VolunteerDashboard.jsx # Volunteer dashboard & task management
+        │   ├── AdminDashboard.jsx   # Admin management panel
+        │   ├── RequestAssistancePage.jsx # Multi-step request wizard
+        │   ├── ProfilePage.jsx      # Profile management
+        │   ├── SettingsPage.jsx     # App settings
+        │   ├── LoginPage.jsx        # Login page
+        │   ├── RegisterPage.jsx     # Account registration
+        │   └── LandingPage.jsx      # Public landing page
+        └── components/              # UI components & cards
 ```
 
 ---
@@ -136,10 +126,9 @@ careconnect/
 ## 🚀 Getting Started
 
 ### Prerequisites
-
-- **Python** 3.10 or higher
-- **Node.js** 18 or higher
-- **npm** 9 or higher
+- **Python** 3.10+
+- **Node.js** 18+
+- **npm** 9+
 
 ---
 
@@ -152,31 +141,31 @@ cd CareConnect
 
 ---
 
-### 2. Set Up the Backend
+### 2. Set Up & Run Backend
 
 ```bash
 cd backend
 
-# Create and activate virtual environment
+# Create virtual environment
 python -m venv venv
 
-# On Windows:
+# Activate virtual environment
+# Windows:
 venv\Scripts\activate
-# On macOS/Linux:
+# macOS/Linux:
 source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Start the Flask server
+# Run backend API
 python app.py
 ```
-
-> ✅ The API will be running at **http://localhost:5000**
+> API server will run at `http://localhost:5000`
 
 ---
 
-### 3. Set Up the Frontend
+### 3. Set Up & Run Frontend
 
 Open a **new terminal**:
 
@@ -186,72 +175,53 @@ cd frontend
 # Install dependencies
 npm install
 
-# Start the dev server
+# Run dev server
 npm run dev
 ```
-
-> ✅ The app will be running at **http://localhost:5173**
+> Frontend application will run at `http://localhost:5173`
 
 ---
 
-## 🔑 API Reference
+## 🔑 API Reference Summary
 
 ### Authentication
-| Method | Endpoint | Description | Auth |
-|---|---|---|---|
-| `POST` | `/api/register` | Register a new user | ❌ |
-| `POST` | `/api/login` | Login and receive JWT | ❌ |
-
-### Assistance Requests
-| Method | Endpoint | Description | Auth |
-|---|---|---|---|
-| `GET` | `/api/requests` | List requests (role-filtered) | ✅ |
-| `POST` | `/api/requests` | Create a request | ✅ Elder |
-| `PUT` | `/api/requests/:id` | Update a request | ✅ |
-| `DELETE` | `/api/requests/:id` | Delete a request | ✅ |
-
-### User Profile
-| Method | Endpoint | Description | Auth |
-|---|---|---|---|
-| `GET` | `/api/profile` | Get own profile | ✅ |
-| `PUT` | `/api/profile` | Update profile | ✅ |
-| `GET` | `/api/emergency-contacts` | List emergency contacts | ✅ |
-| `POST` | `/api/emergency-contacts` | Add emergency contact | ✅ |
-| `DELETE` | `/api/emergency-contacts/:id` | Remove contact | ✅ |
-
-### Admin (Admin role only)
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/admin/stats` | Platform statistics |
-| `GET` | `/api/admin/users` | All registered users |
-| `PUT` | `/api/admin/users/:id/toggle-active` | Activate/deactivate user |
-| `DELETE` | `/api/admin/users/:id` | Delete a user |
-| `GET` | `/api/admin/requests` | All platform requests |
-| `GET` | `/api/admin/volunteers` | All volunteer profiles |
+| `POST` | `/api/register` | Register new Elder, Volunteer, or Admin account |
+| `POST` | `/api/login` | Login and receive JWT access token |
 
----
+### Assistance Requests
+| Method | Endpoint | Description | Access |
+|---|---|---|---|
+| `GET` | `/api/requests` | Fetch requests (role-scoped & filtered) | Authenticated |
+| `POST` | `/api/requests` | Create assistance request | Elder / Admin |
+| `GET` | `/api/requests/:id` | Get single request details | Scoped |
+| `PUT` | `/api/requests/:id` | Update status (`accepted`, `in_progress`, `completed`, `cancelled`) | Scoped |
+| `DELETE` | `/api/requests/:id` | Delete request | Owner / Admin |
 
-## 👤 Default Test Accounts
+### Notifications
+| Method | Endpoint | Description | Access |
+|---|---|---|---|
+| `GET` | `/api/notifications` | Fetch user notifications & unread count | Authenticated |
+| `PUT` | `/api/notifications/read` | Mark notification(s) as read | Authenticated |
+| `DELETE` | `/api/notifications/:id` | Delete notification | Authenticated |
 
-Register via the UI or use these test credentials:
+### Profile & Emergency Contacts
+| Method | Endpoint | Description | Access |
+|---|---|---|---|
+| `GET` | `/api/profile` | Fetch authenticated user profile | Authenticated |
+| `PUT` | `/api/profile` | Update profile fields & volunteer status | Authenticated |
+| `GET` | `/api/emergency-contacts` | Fetch emergency contacts | Authenticated |
+| `POST` | `/api/emergency-contacts` | Add emergency contact | Authenticated |
+| `DELETE` | `/api/emergency-contacts/:id` | Delete emergency contact | Owner |
 
-| Role | Email | Password |
-|---|---|---|
-| 👴 Elder | elder@test.com | Test1234! |
-| 🙋 Volunteer | volunteer@test.com | Test1234! |
-| 🛡️ Admin | admin@test.com | Test1234! |
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to fork the repo and open a pull request.
-
-1. Fork the repository
-2. Create your feature branch: `git checkout -b feature/amazing-feature`
-3. Commit your changes: `git commit -m 'Add some amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
+### Admin Endpoints
+| Method | Endpoint | Description | Access |
+|---|---|---|---|
+| `GET` | `/api/admin/stats` | Aggregate platform metrics | Admin |
+| `GET` | `/api/admin/users` | List all registered users | Admin |
+| `PUT` | `/api/admin/users/:id/toggle-active` | Activate or deactivate user | Admin |
+| `DELETE` | `/api/admin/users/:id` | Delete user | Admin |
 
 ---
 
